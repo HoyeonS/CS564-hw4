@@ -72,27 +72,34 @@ const Status BufMgr::allocBuf(int & frame)
 
 // Make sure that if the buffer frame allocated has a valid page in it, that you remove the appropriate entry from the hash table.
     int totalPin = 0;
+    
     while(true) {
-        BufDesc* tmpBuf = &bufTable[clockHand];
-        if(tmpBuf->valid == true){
-            if(tmpBuf->refbit == true){
-                tmpBuf->refbit = false;
+        cout << clockHand;
+        BufDesc* tmpbuf = &(bufTable[clockHand]);
+        if(tmpbuf->valid == true){
+            cout <<"valid";
+            if(tmpbuf->refbit == true){
+                tmpbuf->refbit = false;
             }
-            else if(tmpBuf->pinCnt > 0){
+            else if(tmpbuf->pinCnt > 0){
                 totalPin++;
             }
             else 
             {
-                if(tmpBuf->dirty == true){
-                    if(this->flushFile(tmpBuf->file) != OK) {
+                if(tmpbuf->dirty == true){
+                    if(this->flushFile(tmpbuf->file) != OK) {
                         return UNIXERR;
                     }
                 }
-                tmpBuf->Set(tmpBuf->file, tmpBuf->pageNo);
-                frame = tmpBuf->frameNo;
+                tmpbuf->Set(tmpbuf->file, tmpbuf->pageNo);
+                frame = tmpbuf->frameNo;
                 return OK;
             }
             
+        }
+        else {
+            frame = tmpbuf->frameNo;
+            return OK;
         }
         if(totalPin >= numBufs){
             return BUFFEREXCEEDED;
