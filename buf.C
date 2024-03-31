@@ -72,10 +72,11 @@ const Status BufMgr::allocBuf(int & frame)
 
 // Make sure that if the buffer frame allocated has a valid page in it, that you remove the appropriate entry from the hash table.
     int totalPin = 0;
-    
+    Status status;
+
     while(true) {
-        cout << clockHand;
         BufDesc* tmpbuf = &(bufTable[clockHand]);
+        cout << tmpbuf->frameNo;
         if(tmpbuf->valid == true){
             cout <<"valid";
             if(tmpbuf->refbit == true){
@@ -87,11 +88,10 @@ const Status BufMgr::allocBuf(int & frame)
             else 
             {
                 if(tmpbuf->dirty == true){
-                    if(this->flushFile(tmpbuf->file) != OK) {
-                        return UNIXERR;
+                    if((status = flushFile(tmpbuf->file)) != OK) {
+                        return status;
                     }
                 }
-                tmpbuf->Set(tmpbuf->file, tmpbuf->pageNo);
                 frame = tmpbuf->frameNo;
                 return OK;
             }
@@ -107,6 +107,7 @@ const Status BufMgr::allocBuf(int & frame)
         clockHand++;
         clockHand %= numBufs;
     }
+    
 }
 
 	
@@ -125,25 +126,25 @@ const Status BufMgr::readPage(File* file, const int PageNo, Page*& page)
     Status status = hashTable->lookup(file, PageNo, frameNo);
 
     if(status == HASHNOTFOUND){
-        Status statusBuf = this->allocBuf(frameNo);
+        Status statusBuf = allocBuf(frameNo);
         if(statusBuf == BUFFEREXCEEDED){
             return BUFFEREXCEEDED;
         }
         else if(statusBuf == UNIXERR){
             return UNIXERR;
         }
-        BufDesc* tmpBuf = &bufTable[frameNo];
+        BufDesc* tmpBuf = &(bufTable[frameNo]);
 
         tmpBuf->file->readPage(tmpBuf->pageNo, page);
 
-        if(hashTable->insert(tmpBuf->file, tmpBuf->pageNo, tmpBuf->frameNo) == HASHTBLERROR) {
+        if((status = hashTable->insert(file, tmpBuf->pageNo, tmpBuf->frameNo)) == HASHTBLERROR) {
             return HASHTBLERROR;
         }
-        tmpBuf->Set(tmpBuf->file, tmpBuf->pageNo);
+        tmpBuf->Set(file, tmpBuf->pageNo);
         return OK;
     } else {
         BufDesc* tmpBuf = &bufTable[frameNo];
-        tmpBuf->refbit = 1;
+        tmpBuf->refbit = true;
         tmpBuf->pinCnt++;
         tmpBuf->file->readPage(tmpBuf->pageNo, page);
         return OK;
@@ -165,10 +166,13 @@ const Status BufMgr::unPinPage(File* file, const int PageNo,
         return HASHNOTFOUND;
     }
     else {
-        BufDesc* tmpBuf = &bufTable[frameNo];
+        BufDesc* tmpBuf = (&bufTable[frameNo]);
 
         if(tmpBuf->pinCnt == 0){
             return PAGENOTPINNED;
+        }
+        if(dirty == true){
+            tmpBuf->dirty = true;
         }
         tmpBuf->pinCnt--;
         return OK;
@@ -191,14 +195,14 @@ const Status BufMgr::allocPage(File* file, int& pageNo, Page*& page)
 // Returns OK if no errors occurred, UNIXERR if a Unix error occurred, BUFFEREXCEEDED if all buffer frames are pinned and HASHTBLERROR if a hash table error occurred. 
     file->allocatePage(pageNo);
     int frameNo = 0;
-    Status status = this->allocBuf(frameNo);
+    Status status = allocBuf(frameNo);
     if(status == UNIXERR){
         return UNIXERR;
     }
     else if(status == BUFFEREXCEEDED){
         return BUFFEREXCEEDED;
     }
-    if(hashTable->insert(file, pageNo, frameNo) == HASHTBLERROR){
+    if((status = hashTable->insert(file, pageNo, frameNo)) == HASHTBLERROR){
         return HASHTBLERROR;
     }
     BufDesc* tmpBuf = &bufTable[frameNo];
